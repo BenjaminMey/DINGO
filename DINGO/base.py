@@ -43,6 +43,15 @@ class DINGO(pe.Workflow):
         'DSI_EXP'               :    'DINGO.DSI_Studio'
     }
     
+    default_expected_keys = (
+        ('name', (unicode,str)),
+        ('data_dir', (unicode,str)),
+        ('steps', list),
+        ('method', dict),
+        (('included_ids', list), (
+            ('included_imgs', list), ('included_masks', list)))
+    )
+    
     def __init__(self, configpath=None, workflow_to_module=None, name=None,\
     **kwargs):
         if name is None:
@@ -278,15 +287,16 @@ class DINGO(pe.Workflow):
                     
                 #srcobj = self.subflows[srckey]
                 self.make_connection(srcobj, srcfield, destobj, destfield)
-        
+                
             
-    def create_wf_from_config(self, cfgpath, expected_keys=None):
+    def create_wf_from_config(self, cfgpath=None, cfg=None, expected_keys=None):
         """Create and connect steps provided in json configuration file.
         
         Parameters
         ----------
-        cfgpath            :    filepath to json configuration
-        expected_keys    :    tuple pairs of keyname and expected type
+        cfgpath         :    filepath to json configuration
+        cfg             :    directly input dictionary with which to create wf
+        expected_keys   :    tuple pairs of keyname and expected type
             ('key', expected_type)
             (('key', expected_type), ('altkey', expected_type))
         
@@ -306,24 +316,19 @@ class DINGO(pe.Workflow):
             subflows{subflow}
         """
         
-        #cfgpath = '/home/pirc/Desktop/DWI/DINGO/res/Neonates_analysis_config.json'
-        
         #Read config file
-        if cfgpath is None:
-            raise NameError('Required cfgpath unspecified')
-        cfg = read_config(cfgpath)
-        cfg_bn = os.path.basename(cfgpath)
+        if cfg is None:
+            if cfgpath is None:
+                raise NameError('Required cfgpath or cfg unspecified')
+            else:
+                cfg = read_config(cfgpath)
+                cfg_bn = os.path.basename(cfgpath)
+        else:
+            cfg_bn = cfg['name']
         
         #Check important config keys
         if expected_keys is None:
-            expected_keys = (
-                ('name', (unicode,str)),
-                ('data_dir', (unicode,str)),
-                ('steps', list),
-                ('method', dict),
-                (('included_ids', list), (
-                    ('included_imgs', list), ('included_masks', list)))
-            )
+            expected_keys = self.default_expected_keys
         #expected keynames should be toplevel fields in the config
         input_fields = self.check_input_fields(cfg_bn, cfg, expected_keys)
         if 'data_dir' in input_fields:
