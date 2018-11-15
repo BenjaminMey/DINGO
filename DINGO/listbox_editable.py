@@ -1,12 +1,15 @@
 import tkinter as tk
 from tkinter import ttk
 from pprint import pprint
+import traceback as tb
+import sys
 
 
-class ListboxEditable(object):
+class ListboxEditable(tk.Frame, tk.XView, tk.YView):
     """Act as listbox, but convert to entry upon selection, then update"""
     def __init__(self, master, alist, font='Calibri', size=12, 
-    ColorActive='#E3E3E3', ColorNotActive='#C9C9C9'):
+    ColorActive='#E3E3E3', ColorNotActive='#C9C9C9', **kwargs):
+        tk.Frame.__init__(self, master, **kwargs)
         self.master = master
         self.mylist = alist
         self.NRows = len(self.mylist)
@@ -18,18 +21,18 @@ class ListboxEditable(object):
         self.grid_widgets()
         
     def create_widgets(self):
+        # only need one entry
         self.entryVar = tk.StringVar()
         self.entry = tk.Entry(self.master, textvariable=self.entryVar, 
                 font=(self.font, self.size), width=20, borderwidth=2)
+        self.scrollbar = tk.Scrollbar(self.master)
         
         self.numbers = []
         self.editables = []
         for i in xrange(len(self.mylist) + 1):
-            self.add_label(i)
-        print('NRows: %s' % self.NRows)
-        print('len(editables): %s' % len(self.editables))
+            self.add_editable(i)
     
-    def add_label(self, i, fg_color='black', bw=2, jfy=tk.LEFT):
+    def add_editable(self, i, fg_color='black', bw=2, jfy=tk.LEFT):
         if i == self.NRows:
             self.NRows = self.NRows + 1
             self.mylist.append('')
@@ -46,40 +49,70 @@ class ListboxEditable(object):
                 font=(self.font, self.size), 
                 foreground=fg_color, background=self.ColorNotActive,   
                 borderwidth=bw, width=20, justify=jfy))
+        self.bind_editable(i)
                 
-        self.editables[i].bind('<Button-1>', lambda event, x=i :
-                self.select(x))
-        self.editables[i].bind('<Up>', lambda event, x=i :
-                self.select_up(x))
-        self.editables[i].bind('<Down>', lambda event, x=i : 
-                self.select_down(x))
-        self.editables[i].bind('<Double-1>', lambda event, x=i : 
-                self.label2entry(x))
-        self.editables[i].bind('<Return>', lambda event, x=i : 
-                self.label2entry(x))
-        self.numbers[i].bind('<Button-1>', lambda event, x=i :
-                self.select(x))
-        self.numbers[i].bind('<Double-1>', lambda event, x=i : 
-                self.label2entry(x))
-        
-    def del_label(self, i):
-        self.NRows = self.NRows - 1
-        del self.mylist[i]
-        self.editables[i].destroy()
-        del self.editables[i]
-        self.numbers[-1].destroy()
-        del self.numbers[-1]
+    def bind_editable(self, i, flag=None):
+        idx = i
+        if flag == 'deletion':
+            for i in xrange(idx,self.NRows):
+                self.editables[i].bind('<Up>', lambda event, x=i :
+                        self.select_up(x))
+                self.editables[i].bind('<Down>', lambda event, x=i : 
+                        self.select_down(x))
+                self.editables[i].bind('<Button-1>', lambda event, x=i :
+                        self.select(x))
+                self.editables[i].bind('<Double-1>', lambda event, x=i : 
+                        self.label2entry(x))
+                self.editables[i].bind('<Return>', lambda event, x=i : 
+                        self.label2entry(x))
+                self.editables[i].bind('<Delete>', lambda event, x=i :
+                        self.del_editable(x))
+                self.numbers[i].bind('<Button-1>', lambda event, x=i :
+                        self.select(x))
+                self.numbers[i].bind('<Double-1>', lambda event, x=i : 
+                        self.label2entry(x))
+        else:
+            self.editables[i].bind('<Up>', lambda event, x=i :
+                    self.select_up(x))
+            self.editables[i].bind('<Down>', lambda event, x=i : 
+                    self.select_down(x))
+            self.editables[i].bind('<Button-1>', lambda event, x=i :
+                    self.select(x))
+            self.editables[i].bind('<Double-1>', lambda event, x=i : 
+                    self.label2entry(x))
+            self.editables[i].bind('<Return>', lambda event, x=i : 
+                    self.label2entry(x))
+            self.editables[i].bind('<Delete>', lambda event, x=i :
+                    self.del_editable(x))
+            self.numbers[i].bind('<Button-1>', lambda event, x=i :
+                    self.select(x))
+            self.numbers[i].bind('<Double-1>', lambda event, x=i : 
+                    self.label2entry(x))
+                
+    def del_editable(self, i):
+        if i != self.NRows - 1:
+            self.NRows = self.NRows - 1
+            del self.mylist[i]
+            self.editables[i].destroy()
+            del self.editables[i]
+            self.numbers[-1].destroy()
+            del self.numbers[-1]
+            self.numbers[-1].configure(text=
+                    ''.join(('Add ', str(self.NRows-1), ':')))
+            self.bind_editable(i, 'deletion')
+            self.grid_widgets()
+            self.select(i)
                        
     def grid_widgets(self):
         self.master.grid_columnconfigure(0, weight=1)
-        self.master.grid_columnconfigure(1, weight=4)
+        self.master.grid_columnconfigure(1, weight=5)
+        self.master.grid_columnconfigure(0, weight=1)
+        self.scrollbar.grid(row=0, column=2, rowspan=self.NRows)
         for i in xrange(self.NRows):
             self.numbers[i].grid(row=i, column=0)
             self.editables[i].grid(row=i, column=1)
     
     def select(self, selection):
-        print(selection)
-        pprint(self.__dict__, indent=2)
         for i in xrange(self.NRows):
             self.editables[i].configure(background=self.ColorNotActive)
         self.editables[selection].configure(background=self.ColorActive)
@@ -115,33 +148,41 @@ class ListboxEditable(object):
         self.editables[i].configure(text=e)
         self.entry.grid_forget()
         self.editables[i].grid(row=i, column=1)
-        #default
-        self.select(i)
         #lastrow == '' -> update label
         #otherrow != '' -> update label
         #lastrow != '' -> add row
         #otherrow == '' -> del row
-        print('i: %s, e: %s' % (i,e))
-        if i == self.NRows and e != '':
-            self.del_label(i)
-            self.add_label(i)
+        if i == self.NRows - 1 and e != '':
+            self.numbers[i].configure(text=''.join((str(i),':')))
+            self.add_editable(i+1)
             self.grid_widgets()
+            self.select(i+1)
+        else:
+            self.select(i)
+    
+    def get(self):
+        return self.mylist[:-1]
+        
+    def print_list(self):
+        print(self.get())
 
-def main():
+def test_le():
     testlist = ['foo', 'bar', 'baz', 1, 2, 3]
     root = tk.Tk()
-    mainframe = tk.Frame(root, bg='#C9C9C9')
-    header = tk.Label(mainframe, text='Header', font=('Calibri', 16, 'bold'), 
-            padx=4, pady=4, background='#C9C9C9')
-    frame_listbox = tk.Frame(mainframe, bg='#C9C9C9')
+
+    frame_listbox = tk.LabelFrame(root, text='Header', bg='#C9C9C9')
     listbox = ListboxEditable(frame_listbox, testlist)
-    
-    mainframe.grid(row=0, column=0)
-    header.grid(row=0, column=0, columnspan=1)
-    frame_listbox.grid(row=1, column=0)
+    frame_buttons = tk.Frame(root, bg='#C9C9C9')
+    exit_button = tk.Button(frame_buttons, text='Exit', command=root.destroy)
+    get_button = tk.Button(frame_buttons, text='Print', command=listbox.print_list)
+
+    frame_listbox.grid(row=0, column=0, columnspan=2)
+    frame_buttons.grid(row=1, column=1)
+    exit_button.grid(row=1, column=1, sticky=tk.SE)
+    get_button.grid(row=1, column=0, sticky=tk.SE)
     
     root.mainloop()
 
 if __name__ == '__main__':
-    main()
+    test_le()
     
