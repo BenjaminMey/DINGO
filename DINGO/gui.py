@@ -5,9 +5,9 @@ import os
 import sys
 import json
 import itertools
-import platform
 from DINGO.utils import read_config
 from DINGO.base import DINGO
+from DINGO.editable import EntriesExpandable
 
 loremipsum = ('Lorem ipsum dolor sit amet, consectetur adipiscing elit, '
               'sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. '
@@ -20,103 +20,6 @@ loremipsum = ('Lorem ipsum dolor sit amet, consectetur adipiscing elit, '
 
 shortlorem = 'Lorem ipsum dolor sit amet,'
 
-class Mousewheel_Support(object):
-
-    # implemetation of singleton pattern
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = object.__new__(cls)
-        return cls._instance
-
-    def __init__(self, root, horizontal_factor=2, vertical_factor=2):
-        
-        self._active_area = None
-        self.OS = platform.system()
-
-        if isinstance(horizontal_factor, int):
-            self.horizontal_factor = horizontal_factor
-        else:
-            raise Exception("Vertical factor must be an integer.")
-
-        if isinstance(vertical_factor, int):
-            self.vertical_factor = vertical_factor
-        else:
-            raise Exception("Horizontal factor must be an integer.")
-
-        if platform.system() == "Linux":
-            root.bind_all('<4>', self._on_mousewheel, add='+')
-            root.bind_all('<5>', self._on_mousewheel, add='+')
-        else:
-            # Windows and MacOS
-            root.bind_all("<MouseWheel>", self._on_mousewheel, add='+')
-
-    def _on_mousewheel(self, event):
-        if self._active_area:
-            self._active_area.onMouseWheel(event)
-
-    def _mousewheel_bind(self, widget):
-        self._active_area = widget
-
-    def _mousewheel_unbind(self):
-        self._active_area = None
-
-    def add_support_to(self, widget=None, xscrollbar=None, yscrollbar=None, what="units", horizontal_factor=None, vertical_factor=None):
-        if xscrollbar is None and yscrollbar is None:
-            return
-
-        if xscrollbar is not None:
-            horizontal_factor = horizontal_factor or self.horizontal_factor
-
-            xscrollbar.onMouseWheel = self._make_mouse_wheel_handler(widget, 'x', self.horizontal_factor, what)
-            xscrollbar.bind('<Enter>', lambda event, scrollbar=xscrollbar: self._mousewheel_bind(scrollbar))
-            xscrollbar.bind('<Leave>', lambda event: self._mousewheel_unbind())
-
-        if yscrollbar is not None:
-            vertical_factor = vertical_factor or self.vertical_factor
-
-            yscrollbar.onMouseWheel = self._make_mouse_wheel_handler(widget, 'y', self.vertical_factor, what)
-            yscrollbar.bind('<Enter>', lambda event, scrollbar=yscrollbar: self._mousewheel_bind(scrollbar))
-            yscrollbar.bind('<Leave>', lambda event: self._mousewheel_unbind())
-
-        main_scrollbar = yscrollbar if yscrollbar is not None else xscrollbar
-
-        if widget is not None:
-            if isinstance(widget, list) or isinstance(widget, tuple):
-                list_of_widgets = widget
-                for widget in list_of_widgets:
-                    widget.bind('<Enter>', lambda event: self._mousewheel_bind(widget))
-                    widget.bind('<Leave>', lambda event: self._mousewheel_unbind())
-
-                    widget.onMouseWheel = main_scrollbar.onMouseWheel
-            else:
-                widget.bind('<Enter>', lambda event: self._mousewheel_bind(widget))
-                widget.bind('<Leave>', lambda event: self._mousewheel_unbind())
-
-                widget.onMouseWheel = main_scrollbar.onMouseWheel
-
-    @staticmethod
-    def _make_mouse_wheel_handler(widget, orient, factor=1, what="units"):
-        view_command = getattr(widget, orient + 'view')
-
-        if platform.system() == 'Linux':
-            def onMouseWheel(event):
-                if event.num == 4:
-                    view_command("scroll", (-1) * factor, what)
-                elif event.num == 5:
-                    view_command("scroll", factor, what)
-
-        elif platform.system() == 'Windows':
-            def onMouseWheel(event):
-                view_command("scroll", (-1) * int((event.delta / 120) * factor), what)
-
-        elif platform.system() == 'Darwin':
-            def onMouseWheel(event):
-                view_command("scroll", event.delta, what)
-
-        return onMouseWheel
-
 class DINGOFile(tk.Frame):
     def __init__(self, parent, default_filename=''):
         tk.Frame.__init__(self, parent)
@@ -127,10 +30,10 @@ class DINGOFile(tk.Frame):
         self.new = tk.Button(self, text='New', command=self.new_config(parent))
         
         self.open = tk.Button(self, text='Open', command=self.open_json)
-        self.open.pack(side=LEFT)
+        self.open.pack(side=tk.LEFT)
         
         self.save = tk.Button(self, text='Save', command=self.save_json)
-        self.save.pack(side=LEFT)
+        self.save.pack(side=tk.LEFT)
         
     def new_config(self, parent):
         keys = []
@@ -142,9 +45,9 @@ class DINGOFile(tk.Frame):
         config = dict(zip(keys, itertools.repeat(None)))
         parent.update_options(config)
         
-    def open_json(self):
+    def open_json(self, filename):
         self.filename = tkfd.askopenfilename(
-            initaldir=os.getcwd(), 
+            initialdir=os.getcwd(), 
             title='Select file', 
             filetypes=(('json files','*.json'),('all files','*.*')))
         try:
@@ -161,16 +64,31 @@ class DINGOFile(tk.Frame):
 class DINGOOptions(tk.Frame):
     def __init__(self, parent, config=None):
         tk.Frame.__init__(self, parent)
-        
-        self.scrollbar = tk.Scrollbar(self)
-        self.scrollbar.pack(side=RIGHT,fill=Y)
-        
-        self.listbox = tk.ListBox(self)
+        self.entries = {}
+
+        self.yscrollbar = tk.Scrollbar(self)
+        self.yscrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.xscrollbar = tk.Scrollbar(self)
+        self.xscrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.propbox = ListboxEditable(self)
+        self.propbox.pack(side=tk.LEFT, fill=tk.BOTH)
         
     def make_options_widget(self, k, v):
         print('k: {}, v: {}'.format(k,v))
         if isinstance(v,(unicode,str)):
-            pass
+            myframe = tk.LabelFrame(self, text=k)
+            myvar = tk.StringVar()
+            myvar.set('')
+            myentry = tk.Entry(myframe, textvariable=myvar)
+            myentry.pack()
+        elif isinstance(v, list):
+            myframe = EntriesExpandable(self, text=k)
+            myvar = myframe # provides get() & set() methods
+        elif isinstance(v, dict):
+            myframe = EntriesExpandable(self, text=' '.join((k, 'keys')))
+        self.entries.update({k:(myframe, myvar)})
+            
             
     def make_input_widget(self, aninput):
         pass
@@ -207,28 +125,29 @@ class DINGOApp(tk.Tk):
         #root.mainloop()
             
     def create_widgets(self, filename=None):
+        self.options = DINGOOptions(self)
+        self.options.pack()
         self.setup = DINGOFile(self)
         self.setup.pack()
         
         if filename is not None:
             config = self.setup.open_json(filename)
+        else:
+            config = self.setup.new_config(self)
         if config is not None:
             try:
                 aDINGO.check_input_fields('DINGOApp', config, DINGO.default_expected_keys)
             except Exception as err:
                 handle_create_error(err)
-                
-        self.options = DINGOOptions(self)
-        self.options.pack()
         
-        self.run = tk.Button(self, text='Run', command=run_DINGO)
+        self.run = tk.Button(self, text='Run', command=self.run_DINGO)
         self.run.pack()
         
         self.plugin = tk.Entry(self, text='Linear')
-        self.plugin.pack(side=LEFT)
+        self.plugin.pack(side=tk.LEFT)
         
         self.plugin_args = Extra_entry()
-        self.plugin_args.pack(side=LEFT)
+        self.plugin_args.pack(side=tk.LEFT)
         
     def grid_widgets(self):
         options = dict(sticky=NSEW, padx=4, pady=4)
@@ -239,7 +158,7 @@ class DINGOApp(tk.Tk):
         
     def update_options(self, config):
         for k,v in config.iteritems():
-            DINGOOptions.make_options_widget(k,v)
+            self.options.make_options_widget(k,v)
             
     def handle_create_error(err):
         tkmb.showerror('DINGO Creation Error', err)
