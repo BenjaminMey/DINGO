@@ -1,7 +1,8 @@
 import os
-import importlib
 import copy
 import json
+import csv
+import re
 from nipy import load_image
 import numpy as np
 
@@ -450,3 +451,148 @@ def read_setup(setuppath):
         logger.exception("Config file could not be read: " + setuppath)
         raise
     return setup
+
+
+def read_file(filename):
+    """From filename, read all lines, return contents as string
+
+    Parameters
+    ----------
+    filename    :   Str
+
+    Returns
+    -------
+    file contents   :   Str (None if not found)
+    """
+    try:
+        with open(filename, 'r') as f:
+            from_file = f.read()
+    except IOError:
+        from_file = None
+    return from_file
+
+
+def read_list_by_lines(filename):
+    """From filename, read all lines, return lines as list without newline
+
+    Parameters
+    ----------
+    filename    :   Str
+
+    Returns
+    -------
+    file_contents   :   List
+    """
+    from_file = read_file(filename)
+    id_list = from_file.split('\n')
+
+    n_blank_lines = id_list.count('')
+    for _ in xrange(0, n_blank_lines):
+        id_list.remove('')
+    return id_list
+
+
+def read_ind_stats_file(filename):
+    """Given a dsi_studio stats file, return list of [key, value] pairs
+
+    Parameters
+    ----------
+    filename    :   Str
+
+    Returns
+    -------
+    Labeled stats   :   List[ [Name, Value], ... ]
+    """
+    ind_data_list = read_list_by_lines(filename)
+    ind_data_list = [ele.strip().replace(' ', '_') for ele in ind_data_list]
+    ind_data_list = map(lambda x: x.split('\t'), ind_data_list)
+    return ind_data_list
+
+
+def read_ind_stats_from_dir(directory, file_list, pattern):
+    """Find first(only) file in directory matching pattern, return its data
+    as a list of pairs. If not found returns None.
+    """
+    ind_data_list = None
+    for afile in file_list:
+        if re.search(pattern, afile):
+            ind_data_list = read_ind_stats_file(os.path.join(directory, afile))
+            # only one with one individual per folder so break loop and return early
+            break
+    return ind_data_list
+
+
+def update_dict_from_list(data_dict, data_list, primary, secondary_list):
+    """With List[ [secondarykey, value] ],
+    update dict { primary_secondarykey: value }"""
+    for secondary in secondary_list:
+        key2update = '_'.join((primary, secondary))
+
+        for pair in data_list:
+            if secondary in pair[0]:
+                data_dict.update({key2update: pair[1]})
+
+
+def collate_tract_stats(file_lists, ids, category, tracts, stats, directory, fileout_bn):
+    """Write CSV id_category, tract_stat to fileout_bn.
+    When tract not found, values will be ''
+
+    Parameters
+    ----------
+    file_lists  :   List[List[Str]] (list of lists of tract statistics files)
+    ids         :   List[Str] (list of id strs matching file_lists index)
+    category    :   Str or List[Str] (if Str, apply to all ids,
+        if List[Str], apply to id with matching index)
+    tracts      :   List[Str] (tracts for which to get statistics)
+    stats       :   List[Str] (stats to get for each tract)
+    directory   :   Str (directory to which to write file)
+    fileout_bn  :   Str (basename of file to write)
+
+    Outputs
+    -------
+    collated_stats_file :   os.path.abspath(fileout_bn) WILL OVERWRITE"""
+    if category is not None:
+        if isinstance(category, str):
+            ids_cat = ('_'.join((anid, category)) for anid in ids)
+        if isinstance(category, (list, tuple)):
+            ids_cat = ('_'.join((ids[i], category[i])) for i in xrange(len(ids)))
+    else:
+        ids_cat = ids
+    ts_fixed = [ts.replace(' ', '_') for ts in stats]
+    tract_tsf = ['_'.join((t, tsf)) for t in tracts for tsf in ts_fixed]
+    fieldnames = ['id']
+    fieldnames.extend(tract_tsf)
+
+    base_dict = {ttsf: None for ttsf in tract_tsf}
+    data = [dict(id=anid, **base_dict) for anid in ids_cat]
+
+    for idx in xrange(len(ids)):
+        files = file_lists[idx]
+        for afile in files:
+            # file vs tract check
+            tract_data = read_ind_stats_file(afile)
+            if tract_data is not None:
+                update_dict_from_list(data[idx], tract_data, t, ts_fixed)
+
+    write_group_file(base_dir, fileout_bn, fieldnames, data)
+
+
+def write_group_file(out_dir, fileout_bn, fn, data):
+    """Write list of dicts as fileout_bn to out_dir
+
+    Parameters
+    ----------
+    out_dir     :   Str (directory which to write file)
+    fileout_bn  :   Str (basename of file to write)
+    fn          :   List (fieldnames / column headers)
+    data        :   List[Dict] (each dict a source for a row)
+
+    Writes
+    ------
+    out_file    :   CSV (will overwrite)
+    """
+    out_file = os.path.join(out_dir, fileout_bn)
+    with open(out_file, 'wb') as f:
+        w = csv.DictWriter(f, fieldnames=fn)
+        w.writeheader()
+        [w.writerow(row) for row in data]
