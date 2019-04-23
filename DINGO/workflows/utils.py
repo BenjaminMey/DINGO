@@ -1,6 +1,11 @@
 import os
-from DINGO.utils import (read_setup, split_chpid, join_strs)
-from DINGO.base import DINGO, DINGOFlow, DINGONode
+from DINGO.utils import (read_setup,
+                         split_chpid,
+                         join_strs,
+                         collate_tract_stats)
+from DINGO.base import (DINGO,
+                        DINGOFlow,
+                        DINGONode)
 from nipype import IdentityInterface, Function
 import nipype.pipeline.engine as pe
 import nipype.interfaces.io as nio
@@ -15,7 +20,8 @@ class HelperFlow(DINGO):
             'FileIn':           'DINGO.workflows.utils',
             'FileInSConfig':    'DINGO.workflows.utils',
             'FileOut':          'DINGO.workflows.utils',
-            'DICE':             'DINGO.workflows.utils'
+            'DICE':             'DINGO.workflows.utils',
+            'CollateStats':     'DINGO.workflows.utils'
         }
         
         if workflow_to_module is None:
@@ -29,6 +35,87 @@ class HelperFlow(DINGO):
             workflow_to_module=workflow_to_module,
             **kwargs
         )
+
+
+class CollateStats(DINGOFlow):
+    """Nipype workflow which takes tract statistics files and outputs a csv
+    WILL OVERWRITE
+
+    Inputs
+    ------
+    collatenode.ids           :   List[Str] - str representing an id
+    collatenode.file_lists    :   List[List[Str]] - a list for each id in ids
+    collatenode.id_category   :   Str or List[Str] - if List[Str], same length as ids
+    collatenode.tracts        :   List[Str] - tracts for which to get data
+    collatenode.stats         :   List[Str] - stats to get for each tract
+    collatenode.directory     :   Str - directory to write collated csv file
+    collatenode.filename      :   Str - filename to write (WILL OVERWRITE)
+
+    Outputs
+    -------
+    collatenode.out_file    :   Str - os.path.join(directory, filename)
+    """
+    connection_spec = {
+        'file_lists':   ['FileIn', 'stat_files']
+    }
+
+    def __init__(self, name='CollateStats', inputs=None, **kwargs):
+        if inputs is None:
+            inputs = {}
+        super(CollateStats, self).__init__(name=name, **kwargs)
+
+        if 'join_req' in inputs and inputs['join_req']:
+            join_req = inputs['join_req']
+            del inputs['join_req']
+        else:
+            join_req = True
+
+        input_names = ('directory',
+                       'savename',
+                       'ids',
+                       'file_lists',
+                       'category',
+                       'tracts',
+                       'stats'
+                       )
+#        input_iters = [('ids', inputs['ids']),
+#                       ('file_lists', inputs['file_lists'])
+#                       ]
+#        if join_req:
+#             inputnode = pe.JoinNode(
+#                name='inputnode',
+#                interface=IdentityInterface(fields=input_fields),
+#                joinfield=['file_lists'],
+#                joinsource=self.setup_inputs
+#            )
+#        else:
+#            inputnode = pe.Node(
+#                name='inputnode',
+#                interface=IdentityInterface(fields=input_fields)
+#            )
+#        inputnode.iterables = input_iters
+#        inputnode.synchronize = True
+#        inputnode.parameterization = ['ids']
+        collate_args = dict(name='collate_stats',
+                            interface=Function(input_names=input_names,
+                                               output_names=['out_file'],
+                                               function=collate_tract_stats
+                                               )
+                            )
+        if join_req:
+            node_type = pe.JoinNode
+            collate_args.update(dict(joinfield=['file_lists'],
+                                     joinsource=self.setup_inputs
+                                     )
+                                )
+        else:
+            node_type = pe.Node
+        collatenode = node_type(**collate_args)
+
+        for an_input in input_names:
+            if an_input in inputs and inputs[an_input] is not None:
+                setattr(collatenode.inputs, an_input, inputs[an_input])
+        self.add_nodes(collatenode)
 
 
 class DICE(DINGOFlow):

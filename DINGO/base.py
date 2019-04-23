@@ -138,6 +138,7 @@ class DINGO(pe.Workflow):
         'FileIn_SConfig':   'DINGO.workflows.utils',
         'FileOut':          'DINGO.workflows.utils',
         'DICE':             'DINGO.workflows.utils',
+        'CollateStats':     'DINGO.workflows.utils',
         'Reorient':         'DINGO.workflows.fsl',
         'EddyC':            'DINGO.workflows.fsl',
         'BET':              'DINGO.workflows.fsl',

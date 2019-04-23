@@ -483,6 +483,8 @@ def read_list_by_lines(filename):
     -------
     file_contents   :   List
     """
+    # imports in function for use as nipype function node
+    from DINGO.utils import read_file
     from_file = read_file(filename)
     id_list = from_file.split('\n')
 
@@ -503,6 +505,8 @@ def read_ind_stats_file(filename):
     -------
     Labeled stats   :   List[ [Name, Value], ... ]
     """
+    # imports in function for use as nipype function node
+    from DINGO.utils import read_list_by_lines
     ind_data_list = read_list_by_lines(filename)
     ind_data_list = [ele.strip().replace(' ', '_') for ele in ind_data_list]
     ind_data_list = map(lambda x: x.split('\t'), ind_data_list)
@@ -513,6 +517,9 @@ def read_ind_stats_from_dir(directory, file_list, pattern):
     """Find first(only) file in directory matching pattern, return its data
     as a list of pairs. If not found returns None.
     """
+    # imports in function for use as nipype function node
+    import re
+    from DINGO.utils import read_ind_stats_file
     ind_data_list = None
     for afile in file_list:
         if re.search(pattern, afile):
@@ -533,50 +540,6 @@ def update_dict_from_list(data_dict, data_list, primary, secondary_list):
                 data_dict.update({key2update: pair[1]})
 
 
-def collate_tract_stats(file_lists, ids, category, tracts, stats, directory, fileout_bn):
-    """Write CSV id_category, tract_stat to fileout_bn.
-    When tract not found, values will be ''
-
-    Parameters
-    ----------
-    file_lists  :   List[List[Str]] (list of lists of tract statistics files)
-    ids         :   List[Str] (list of id strs matching file_lists index)
-    category    :   Str or List[Str] (if Str, apply to all ids,
-        if List[Str], apply to id with matching index)
-    tracts      :   List[Str] (tracts for which to get statistics)
-    stats       :   List[Str] (stats to get for each tract)
-    directory   :   Str (directory to which to write file)
-    fileout_bn  :   Str (basename of file to write)
-
-    Outputs
-    -------
-    collated_stats_file :   os.path.abspath(fileout_bn) WILL OVERWRITE"""
-    if category is not None:
-        if isinstance(category, str):
-            ids_cat = ('_'.join((anid, category)) for anid in ids)
-        if isinstance(category, (list, tuple)):
-            ids_cat = ('_'.join((ids[i], category[i])) for i in xrange(len(ids)))
-    else:
-        ids_cat = ids
-    ts_fixed = [ts.replace(' ', '_') for ts in stats]
-    tract_tsf = ['_'.join((t, tsf)) for t in tracts for tsf in ts_fixed]
-    fieldnames = ['id']
-    fieldnames.extend(tract_tsf)
-
-    base_dict = {ttsf: None for ttsf in tract_tsf}
-    data = [dict(id=anid, **base_dict) for anid in ids_cat]
-
-    for idx in xrange(len(ids)):
-        files = file_lists[idx]
-        for afile in files:
-            # file vs tract check
-            tract_data = read_ind_stats_file(afile)
-            if tract_data is not None:
-                update_dict_from_list(data[idx], tract_data, t, ts_fixed)
-
-    write_group_file(base_dir, fileout_bn, fieldnames, data)
-
-
 def write_group_file(out_dir, fileout_bn, fn, data):
     """Write list of dicts as fileout_bn to out_dir
 
@@ -591,8 +554,101 @@ def write_group_file(out_dir, fileout_bn, fn, data):
     ------
     out_file    :   CSV (will overwrite)
     """
+    # imports in function for use as nipype function node
+    import os
+    import csv
     out_file = os.path.join(out_dir, fileout_bn)
     with open(out_file, 'wb') as f:
         w = csv.DictWriter(f, fieldnames=fn)
         w.writeheader()
         [w.writerow(row) for row in data]
+    return out_file
+
+
+def collate_tract_stats(directory, savename,
+                        ids, file_lists, category=None,
+                        tracts=None, stats=None):
+    """Write CSV id_category, tract_stat to fileout_bn.
+    When tract not found, values will be ''
+
+    Parameters
+    ----------
+    ids         :   List[Str] - list of id strs matching file_lists index
+    file_lists  :   List[List[Str]] - list of lists of tract statistics files
+    category    :   Str or List[Str] - if Str, apply to all ids,
+        if List[Str], apply to id with matching index
+    tracts      :   List[Str] - tracts for which to get statistics
+    stats       :   List[Str] - stats to get for each tract
+    directory   :   Str - directory to which to write file
+    fileout_bn  :   Str - basename of file to write
+
+    Outputs
+    -------
+    collated_stats_file :   os.path.abspath(fileout_bn) WILL OVERWRITE"""
+    # imports in function for use as nipype function node
+    from DINGO.utils import (read_ind_stats_file,
+                             update_dict_from_list)
+    default_tracts = (
+        'CCBody',
+        'Genu',
+        'Splenium',
+        'CST_L',
+        'CST_R',
+        'FOF_L',
+        'FOF_R',
+        'ILF_L',
+        'ILF_R',
+        'SLFA_L',
+        'SLFP_L',
+        'SLFA_R',
+        'SLFP_R'
+    )
+    default_stats = (
+        'number of tracts',
+        'tract length mean',
+        'tract length sd',
+        'tracts volume',
+        'fa mean',
+        'fa sd',
+        'md mean',
+        'md sd',
+        'ad mean',
+        'ad sd',
+        'rd mean',
+        'rd sd'
+    )
+    if tracts is None:
+        tracts = default_tracts
+    if stats is None:
+        stats = default_stats
+    if category is not None:
+        if isinstance(category, str):
+            ids_cat = ('_'.join((anid, category)) for anid in ids)
+        elif isinstance(category, (list, tuple)):
+            ids_cat = ('_'.join((ids[i], category[i])) for i in xrange(len(ids)))
+        else:
+            raise TypeError('category is not str, tuple, or list')
+    else:
+        ids_cat = ids
+    ts_fixed = [ts.replace(' ', '_') for ts in stats]
+    tract_tsf = ['_'.join((t, tsf)) for t in tracts for tsf in ts_fixed]
+    fieldnames = ['id']
+    fieldnames.extend(tract_tsf)
+
+    base_dict = {ttsf: None for ttsf in tract_tsf}
+    data = [dict(id=anid, **base_dict) for anid in ids_cat]
+
+    for idx in xrange(len(ids)):
+        files = file_lists[idx]
+        for t in tracts:
+            pattern = ''.join((t, '.*', '\.stat\.txt'))
+            for afile in files:
+                if re.search(pattern, afile):
+                    tract_data = read_ind_stats_file(afile)
+                    # only one matching tract per id
+                    break
+            if tract_data is not None:
+                update_dict_from_list(data[idx], tract_data, t, ts_fixed)
+
+    out_file = write_group_file(directory, filename, fieldnames, data)
+    return out_file
