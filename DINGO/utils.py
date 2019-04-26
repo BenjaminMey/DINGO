@@ -565,9 +565,9 @@ def write_group_file(out_dir, fileout_bn, fn, data):
     return out_file
 
 
-def collate_tract_stats(directory, savename,
-                        ids, file_lists, category=None,
-                        tracts=None, stats=None):
+def collate_tract_stats(ids, file_lists, category=None,
+                        tracts=None, stats=None,
+                        directory=None, savename=None):
     """Write CSV id_category, tract_stat to fileout_bn.
     When tract not found, values will be ''
 
@@ -586,8 +586,12 @@ def collate_tract_stats(directory, savename,
     -------
     collated_stats_file :   os.path.abspath(fileout_bn) WILL OVERWRITE"""
     # imports in function for use as nipype function node
-    from DINGO.utils import (read_ind_stats_file,
-                             update_dict_from_list)
+    from DINGO.utils import (flatten,
+                             read_ind_stats_file,
+                             update_dict_from_list,
+                             write_group_file)
+    import os
+    import re
     default_tracts = (
         'CCBody',
         'Genu',
@@ -619,6 +623,8 @@ def collate_tract_stats(directory, savename,
     )
     if tracts is None:
         tracts = default_tracts
+    elif not isinstance(tracts, (list, tuple)):
+        tracts = (tracts,)
     if stats is None:
         stats = default_stats
     if category is not None:
@@ -630,6 +636,16 @@ def collate_tract_stats(directory, savename,
             raise TypeError('category is not str, tuple, or list')
     else:
         ids_cat = ids
+    if directory is None:
+        directory = os.getcwd()
+    if savename is None:
+        savename = ''.join(flatten((
+            'collated_tracts',
+            map('_{}'.format, (t for t in tracts)),
+            '.csv'
+        )))
+    elif not savename.endswith('.csv'):
+        savename = ''.join((savename, '.csv'))
     ts_fixed = [ts.replace(' ', '_') for ts in stats]
     tract_tsf = ['_'.join((t, tsf)) for t in tracts for tsf in ts_fixed]
     fieldnames = ['id']
@@ -641,7 +657,8 @@ def collate_tract_stats(directory, savename,
     for idx in xrange(len(ids)):
         files = file_lists[idx]
         for t in tracts:
-            pattern = ''.join((t, '.*', '\.stat\.txt'))
+            tract_data = []
+            pattern = ''.join(('(?<=[\\\\_\/])', t))
             for afile in files:
                 if re.search(pattern, afile):
                     tract_data = read_ind_stats_file(afile)
