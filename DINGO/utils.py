@@ -650,5 +650,5 @@ def collate_tract_stats(directory, savename,
             if tract_data is not None:
                 update_dict_from_list(data[idx], tract_data, t, ts_fixed)
 
-    out_file = write_group_file(directory, filename, fieldnames, data)
+    out_file = write_group_file(directory, savename, fieldnames, data)
     return out_file

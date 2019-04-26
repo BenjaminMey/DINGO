@@ -55,6 +55,8 @@ class CollateStats(DINGOFlow):
     -------
     collatenode.out_file    :   Str - os.path.join(directory, filename)
     """
+    inputnode = 'inputnode'
+    outputnode = 'collatenode'
     connection_spec = {
         'file_lists':   ['FileIn', 'stat_files']
     }
@@ -78,24 +80,28 @@ class CollateStats(DINGOFlow):
                        'tracts',
                        'stats'
                        )
-#        input_iters = [('ids', inputs['ids']),
-#                       ('file_lists', inputs['file_lists'])
-#                       ]
-#        if join_req:
-#             inputnode = pe.JoinNode(
-#                name='inputnode',
-#                interface=IdentityInterface(fields=input_fields),
-#                joinfield=['file_lists'],
-#                joinsource=self.setup_inputs
-#            )
-#        else:
-#            inputnode = pe.Node(
-#                name='inputnode',
-#                interface=IdentityInterface(fields=input_fields)
-#            )
-#        inputnode.iterables = input_iters
-#        inputnode.synchronize = True
-#        inputnode.parameterization = ['ids']
+        input_iter_names = ('ids',
+                            'file_lists'
+                            )
+        input_iters = []
+        if join_req:
+             inputnode = pe.JoinNode(
+                name='inputnode',
+                interface=IdentityInterface(fields=input_names, mandatory_inputs=False),
+                joinfield=['file_lists'],
+                joinsource=self.setup_inputs
+            )
+        else:
+            inputnode = pe.Node(
+                name='inputnode',
+                interface=IdentityInterface(fields=input_names)
+            )
+        for aname in input_names:
+            if aname in inputs and inputs[aname] is not None:
+                setattr(inputnode.inputs, aname, inputs[aname])
+        #inputnode.iterables = input_iters
+        #inputnode.synchronize = True
+        inputnode.parameterization = False
         collate_args = dict(name='collate_stats',
                             interface=Function(input_names=input_names,
                                                output_names=['out_file'],
@@ -104,18 +110,18 @@ class CollateStats(DINGOFlow):
                             )
         if join_req:
             node_type = pe.JoinNode
-            collate_args.update(dict(joinfield=['file_lists'],
-                                     joinsource=self.setup_inputs
-                                     )
-                                )
+#            collate_args.update(dict(joinfield=['file_lists'],
+#                                     joinsource=self.setup_inputs
+#                                     )
+#                                )
         else:
             node_type = pe.Node
-        collatenode = node_type(**collate_args)
+        collatenode = pe.Node(**collate_args)
 
         for an_input in input_names:
             if an_input in inputs and inputs[an_input] is not None:
                 setattr(collatenode.inputs, an_input, inputs[an_input])
-        self.add_nodes(collatenode)
+        self.connect([(inputnode, collatenode, zip(input_names, input_names))])
 
 
 class DICE(DINGOFlow):
