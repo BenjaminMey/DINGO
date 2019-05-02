@@ -19,7 +19,8 @@ def keep_and_move_files():
 
 
 def check_input_field(setup_bn, setup, keyname, exptype):
-    if keyname not in setup:
+    if (keyname not in setup and
+            keyname not in ('config', 'email')):  # optionals
         raise KeyError('Analysis setup: {0}, missing required key ["{1}"]'
                        .format(setup_bn, keyname))
     elif not isinstance(setup[keyname], exptype):
@@ -366,11 +367,29 @@ class DINGO(pe.Workflow):
         expected_keys    :    tuple pairs of keyname and expected type
             ('key', expected_type)
             (('key', expected_type), ('altkey', expected_type))
-        
-        Updates
+
+        Setup Organization
+        ------------------
+        name            :   Str
+        data_dir        :   Path
+        config          :   Dict (global nipype config updates)
+        email           :   Dict
+            server      :   Str 'server:port'
+            login       :   Str
+            pw          :   Str
+            fromaddr    :   Str
+            toaddr      :   Str
+        included_ids    :   List[Str]
+            included_ids['SubjectId_ScanId_UniqueID']
+        method          :   Dict[Dict]
+            {subflowname{inputs: {}, connect: {}, config: {}}}
+                inputs  :   Dict{inputname: inputvalue}
+                connect :   Dict{inputname: List[subflowname, outputname]}
+                config  :   Dict (subflow nipype config updates)
+
+        Updates: Nipype Workflow, self
         -------
-        Nipype Workflow
-        Node setup_inputs[expected_keys]
+        Nipype Node, Setup_Inputs
             name                :    Str
             data_dir            :    Path
             included_ids        :    List[Str]
@@ -393,6 +412,8 @@ class DINGO(pe.Workflow):
         if expected_keys is None:
             expected_keys = (
                 ('name', (unicode, str)),
+                ('config', dict),
+                ('email', dict),
                 ('data_dir', (unicode, str)),
                 ('steps', list),
                 ('method', dict),
@@ -410,6 +431,8 @@ class DINGO(pe.Workflow):
               os.path.join(self.base_dir, self.name)))
 
         # Set up from configuration
+        if 'config' in input_fields:
+            config.update_config(input_fields['config'])
         self.create_setup_inputs(**input_fields)
 
         if 'email' in setup:
