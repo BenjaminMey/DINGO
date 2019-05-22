@@ -1,5 +1,7 @@
+from __future__ import print_function, unicode_literals
+from builtins import object
 import os
-from typing import List, Any, Tuple
+from typing import List
 import smtplib
 from importlib import import_module
 from email.mime.text import MIMEText
@@ -37,7 +39,7 @@ def check_input_fields(setup_bn, setup, expected_keys):
     alternatives = {}
 
     for keytuple in expected_keys:
-        if isinstance(keytuple[0], (unicode, str)):
+        if isinstance(keytuple[0], str):
             keyname = keytuple[0]
             valtype = keytuple[1]
         elif isinstance(keytuple[0], (tuple, list)):
@@ -53,9 +55,9 @@ def check_input_fields(setup_bn, setup, expected_keys):
             check_input_field(setup_bn, setup, keyname, valtype)
             input_fields.update({keyname: setup[keyname]})
         except (KeyError, TypeError):
-            if keyname in alternatives.keys():
+            if keyname in list(alternatives.keys()):
                 alt = alternatives[keyname]
-                if isinstance(alt[0], (unicode, str)):
+                if isinstance(alt[0], str):
                     keyname = alt[0]
                     valtype = alt[1]
                     check_input_field(setup_bn, setup, keyname, valtype)
@@ -214,10 +216,10 @@ class DINGO(pe.Workflow):
         else:
             setup = pe.Node(name=inputsname,
                             interface=IdentityInterface(
-                                fields=kwargs.keys()))
+                                fields=list(kwargs.keys())))
             iterable_list = []
 
-        for k, v in kwargs.iteritems():
+        for k, v in kwargs.items():
             setattr(setup.inputs, k, v)
             if isinstance(v, list) and k != 'steps':
                 for elt in iterable_list:
@@ -247,8 +249,8 @@ class DINGO(pe.Workflow):
         add subwf to self.subflows[subwfname]
         """
         setup = self.get_node(self._inputsname)
-        for paramkey, paramval in self.input_params[name].iteritems():
-            if isinstance(paramval, (str, unicode)) and \
+        for paramkey, paramval in self.input_params[name].items():
+            if isinstance(paramval, str) and \
                     hasattr(setup.inputs, paramval):
                 setup_val = getattr(setup.inputs, paramval)
                 self.input_params[name].update({paramkey: setup_val})
@@ -308,7 +310,7 @@ class DINGO(pe.Workflow):
         self.input_connections[subwfname] = {'input':['src','output']}
         """
         self.workflow_connections = dict()
-        for destkey, destobj in self.subflows.iteritems():
+        for destkey, destobj in self.subflows.items():
             try:
                 # make sure repeat objs are not using the same dict
                 destobj.connection_spec = destobj.connection_spec.copy()
@@ -322,7 +324,7 @@ class DINGO(pe.Workflow):
 
             self.workflow_connections[destkey] = destobj.connection_spec
             for destfield, values in \
-                    self.workflow_connections[destkey].iteritems():
+                    self.workflow_connections[destkey].items():
                 if len(values) == 2:
                     testsrckey = values[0]
                     srcfield = values[1]
@@ -332,12 +334,12 @@ class DINGO(pe.Workflow):
                     msg = ('Connection spec for {}.{} malformed. Should be '
                            '[SourceObj, SourceKey], or [] to supersede default.'
                            ' but is: {} '.format(destkey, destfield, values))
-                    raise (ValueError(msg))
+                    raise ValueError(msg)
 
                 if testsrckey in self.name2step:
                     # connection from setup, or at least name==step
                     srcobj = self.subflows[testsrckey]
-                elif self.name2step.values().count(testsrckey) > 1:
+                elif list(self.name2step.values()).count(testsrckey) > 1:
                     msg = ('Destination: {0}.{1}, "{2}" used more than once, default '
                            'connections will not work. Add ["method"]["{0}"]'
                            '["connect"]["{1}"] to json to set connection.'
@@ -392,8 +394,8 @@ class DINGO(pe.Workflow):
         # Check important setup keys
         if expected_keys is None:
             expected_keys = (
-                ('name', (unicode, str)),
-                ('data_dir', (unicode, str)),
+                ('name', str),
+                ('data_dir', str),
                 ('steps', list),
                 ('method', dict),
                 (('included_ids', list), (
@@ -425,19 +427,19 @@ class DINGO(pe.Workflow):
                 elif len(nameandstep) == 2:
                     step = nameandstep[1]
                     name = nameandstep[0]
-            elif isinstance(nameandstep, (unicode, str)):
+            elif isinstance(nameandstep, str):
                 step = nameandstep
                 name = nameandstep
             self.name2step.update({name: step})
             # Get changes to defaults from setup file
             # Checking types to give informative error messages
-            if not isinstance(step, (str, unicode, list)):
+            if not isinstance(step, (str, list)):
                 raise TypeError('Analysis Setup: {0}, Invalid configuration.\n'
                                 'Step: {1}, of type "{3}", named {2} '
                                 'is not str or unicode, '
                                 'or list ["module", "object"]'
                                 .format(setup_bn, step, name, type(step)))
-            if not isinstance(name, (str, unicode)):
+            if not isinstance(name, str):
                 raise TypeError('Analysis Setup: {0}, Invalid configuration.\n'
                                 'Name: {2}, of type "{3}", for step {2} '
                                 'is not str or unicode'
@@ -468,8 +470,8 @@ class DINGO(pe.Workflow):
                                     '["method"]["{1}"]["connect"] is not a dict. '
                                     'Value: {2}, Type: {3}'
                                     .format(setup_bn, name, connections, type(connections)))
-                for destfield, values in connections.iteritems():
-                    if not isinstance(destfield, (str, unicode)) or \
+                for destfield, values in list(connections.items()):
+                    if not isinstance(destfield, str) or \
                             not isinstance(values, (list, tuple)):
                         raise TypeError('Analysis Setup: {0}, Invalid configuration '
                                         '["method"]["{1}"]["connect"], '
@@ -546,7 +548,7 @@ class DINGO(pe.Workflow):
             if self.email is not None:
                 msg_list = []
                 msg_list.extend((msg, 'With named steps:'))
-                msg_list.extend(self.subflows.keys())
+                msg_list.extend(list(self.subflows.keys()))
                 self.send_mail(msg_body='\n'.join(msg_list))
 
 

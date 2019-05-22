@@ -1,3 +1,6 @@
+from __future__ import division
+from builtins import str
+from past.utils import old_div
 import os
 import importlib
 import copy
@@ -102,7 +105,7 @@ def join_strs(sep=None, **kwargs):
     
     Return
     ------
-    Str (sep.join(kwargs.itervalues())
+    Str (sep.join(kwargs.values())
     
     Example
     -------
@@ -114,7 +117,7 @@ def join_strs(sep=None, **kwargs):
     if sep is None:
         sep = ''
     arglist = []
-    for arg in kwargs.itervalues():
+    for arg in list(kwargs.values()):
         arglist.append(arg)
     return list_to_str(sep=sep, args=arglist)
 
@@ -259,7 +262,7 @@ def update_dict(indict=None, **kwargs):
         raise TypeError('indict: {} is not a dictionary'.format(indict))
     else:
         outdict = copy.deepcopy(indict)
-    for k, v in kwargs.iteritems():
+    for k, v in list(kwargs.items()):
         if k in outdict:
             tv = type(v)
             td = type(outdict[k])
@@ -332,9 +335,9 @@ def split_chpid(psid, sep):
          CHD_XXX_YYYY_ZZZZ      ->  CHD_XXX, YYYY, ZZZZ
          CHD_XXX_YYYY_ZZZZ_ZZZZ ->  CHD_XXX, YYYY, ZZZZ_ZZZZ
 """
-    if not isinstance(psid, (str, unicode)):
+    if not isinstance(psid, str):
         raise TypeError('{} is not a string'.format(psid))
-    if not isinstance(sep, (str, unicode)):
+    if not isinstance(sep, str):
         raise TypeError('{} is not a string'.format(sep))
 
     splitid = psid.split(sep)
@@ -376,7 +379,7 @@ def tobool(s):
 
     if isinstance(s, bool):
         return s
-    if isinstance(s, (str, unicode)):
+    if isinstance(s, str):
         s = s.lower()
     if s in true:
         return True
@@ -409,14 +412,14 @@ def add_id_subs(input_id=None, subs=None):
     
 
 def byteify(data, ignore_dicts=False):
-    if isinstance(data, unicode):
+    if isinstance(data, str):
         return data.encode('utf-8')
     if isinstance(data, list):
         return [byteify(item, ignore_dicts=True) for item in data]
     if isinstance(data, dict) and not ignore_dicts:
         return {
             byteify(key, ignore_dicts=True): byteify(value, ignore_dicts=True)
-            for key, value in data.iteritems()
+            for key, value in data.items()
         }
     return data
 
