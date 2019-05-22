@@ -1,5 +1,7 @@
-from __future__ import print_function, unicode_literals
-from builtins import object
+from __future__ import (print_function,
+                        unicode_literals)
+from builtins import (object,
+                      str)
 import os
 from typing import List
 import smtplib
@@ -15,26 +17,40 @@ from DINGO.utils import (read_setup,
                          reverse_lookup)
 
 
-def keep_and_move_files():
-    cfg = dict(execution={'remove_unnecessary_outputs': u'false'})
-    config.update_config(cfg)
-
-
 def check_input_field(setup_bn, setup, keyname, exptype):
-    if (keyname not in setup and
-            keyname not in ('config', 'email')):  # optionals
-        raise KeyError('Analysis setup: {0}, missing required key ["{1}"]'
-                       .format(setup_bn, keyname))
+    """
+    Compare setup[keyname] type to an expected one. Raise on Exception.
+
+    Parameters
+    ----------
+    setup_bn    :   Str (filename for data source, used for error msg)
+    setup       :   Dict (inputs to type check)
+    keyname     :   Str
+    exptype     :   Type (the expected type for setup[keyname])
+    Compare type for value for setup[keyname]"""
+    if keyname not in setup:
+        if keyname in ('config', 'email'):  # these are optional
+            return
+        else:
+            raise KeyError('Analysis setup: {0}, missing required key ["{1}"]'
+                           .format(setup_bn, keyname))
     elif not isinstance(setup[keyname], exptype):
-        raise TypeError('Analysis setup: {0}, ["{1}"] is not a {2}'
-                        'Type: {3}, Value: {4}'
+        raise TypeError('Analysis setup: {0}, ["{1}"] is not a {2}, '
+                        'is a {3}, Value: {4}'
                         .format(setup_bn, keyname, exptype,
                                 type(setup[keyname]), setup[keyname]))
 
 
 def check_input_fields(setup_bn, setup, expected_keys):
     """Loop through expected_keys
-    Check if each 0th element has 1st element type
+    Check if each setup[expected_keys[0]] has type expected_keys[1]
+    Return possible subset of the inputs.
+
+    Parameters
+    ----------
+    setup_bn        :   Str (filename for data source, used for error msg)
+    setup           :   Dict (inputs to type check)
+    expected_keys   :   Seq of pairs (key, expected_type)
     """
     input_fields = {}
     alternatives = {}
@@ -55,7 +71,7 @@ def check_input_fields(setup_bn, setup, expected_keys):
         try:
             check_input_field(setup_bn, setup, keyname, valtype)
             input_fields.update({keyname: setup[keyname]})
-        except (KeyError, TypeError):
+        except (KeyError, TypeError) as err:
             if keyname in list(alternatives.keys()):
                 alt = alternatives[keyname]
                 if isinstance(alt[0], str):
@@ -69,18 +85,12 @@ def check_input_fields(setup_bn, setup, expected_keys):
                         valtype = altpair[1]
                         check_input_field(setup_bn, setup, keyname, valtype)
                         input_fields.update({keyname: setup[keyname]})
+            elif (keyname in ('config', 'email') and
+                  isinstance(err, KeyError)):
+                continue  # these are optional
             else:
                 raise
     return input_fields
-
-
-def dingo_node_factory(name=None, engine_type='Node', **kwargs):
-    node_class = type(name,
-                      (getattr(pe, engine_type),),
-                      {})
-    # cannot pickle class (failure on run) if not added to globals
-    globals()[name] = node_class
-    return node_class
 
 
 class DINGONodeFlowBase(object):
@@ -173,7 +183,6 @@ class DINGO(pe.Workflow):
         if name is None:
             name = 'DINGO'
 
-        keep_and_move_files()
         super(DINGO, self).__init__(name=name, **kwargs)
 
         if workflow_to_module is not None:
@@ -258,9 +267,9 @@ class DINGO(pe.Workflow):
         _, obj = self.import_mod_obj(step)
         try:
             if issubclass(obj, Interface):
-                new_class = dingo_node_factory(name=name,
-                                               interface=obj,
-                                               **self.input_params[name])
+                new_class = type(name,
+                                 (getattr(pe, 'Node'),),
+                                 {})
                 self.subflows[name] = new_class(name=name, interface=obj(**self.input_params[name]))
             else:
                 self.subflows[name] = obj(name=name,
@@ -408,8 +417,8 @@ class DINGO(pe.Workflow):
         # Read setup file
         if setuppath is None:
             raise NameError('Required setuppath unspecified')
-        setup = read_setup(setuppath)
-        setup_bn = os.path.basename(setuppath)
+        inputs = read_setup(setuppath)
+        inputs_bn = os.path.basename(setuppath)
 
         # Check important setup keys
         if expected_keys is None:
@@ -424,26 +433,26 @@ class DINGO(pe.Workflow):
                     ('included_imgs', list), ('included_masks', list)))
             )
         # expected keynames should be top level fields in the configuration
-        input_fields = check_input_fields(setup_bn, setup, expected_keys)
-        if 'data_dir' in input_fields:
-            self.base_dir = input_fields['data_dir']
-        if 'name' in input_fields:
-            self.name = input_fields['name']
+        setup = check_input_fields(inputs_bn, inputs, expected_keys)
+        if 'data_dir' in setup:
+            self.base_dir = setup['data_dir']
+        if 'name' in setup:
+            self.name = setup['name']
         os.chdir(self.base_dir)
         print('Nipype cache at: {}'.format(
               os.path.join(self.base_dir, self.name)))
 
         # Set up from configuration
-        if 'config' in input_fields:
-            config.update_config(input_fields['config'])
-        self.create_setup_inputs(**input_fields)
+        if 'config' in setup:
+            config.update_config(setup['config'])
+        self.create_setup_inputs(**setup)
 
         if 'email' in setup:
             self.email = setup['email']
 
-        method = input_fields['method']
+        method = setup['method']
 
-        for nameandstep in input_fields['steps']:
+        for nameandstep in setup['steps']:
             if isinstance(nameandstep, list):
                 if len(nameandstep) == 1:
                     step = nameandstep[0]
@@ -462,26 +471,26 @@ class DINGO(pe.Workflow):
                                 'Step: {1}, of type "{3}", named {2} '
                                 'is not str or unicode, '
                                 'or list ["module", "object"]'
-                                .format(setup_bn, step, name, type(step)))
+                                .format(inputs_bn, step, name, type(step)))
             if not isinstance(name, str):
                 raise TypeError('Analysis Setup: {0}, Invalid configuration.\n'
                                 'Name: {2}, of type "{3}", for step {2} '
                                 'is not str or unicode'
-                                .format(setup_bn, step, name, type(name)))
+                                .format(inputs_bn, step, name, type(name)))
             if name in self.subflows:
                 raise KeyError('Analysis Setup: {0}, Invalid configuration.'
                                ' Duplicates of Name: {1}'
-                               .format(setup_bn, name))
+                               .format(inputs_bn, name))
             if name in method and 'inputs' in method[name]:
                 # inputs are flags for the function creating the workflow
                 # used in various fashions
-                inputs = method[name]['inputs']
+                input_params = method[name]['inputs']
                 if not isinstance(inputs, dict):
                     raise TypeError('Analysis Setup: {0}, Invalid configuration '
                                     '["method"]["{1}"]["inputs"] is not a dict. '
                                     'Value: {2}, Type: {3}'
-                                    .format(setup_bn, name, inputs, type(inputs)))
-                self.input_params[name] = inputs
+                                    .format(inputs_bn, name, input_params, type(inputs)))
+                self.input_params[name] = input_params
             else:
                 self.input_params[name] = {}
                 print('### No input params found for {}, using defaults ###'
@@ -493,14 +502,14 @@ class DINGO(pe.Workflow):
                     raise TypeError('Analysis Setup: {0}, Invalid configuration '
                                     '["method"]["{1}"]["connect"] is not a dict. '
                                     'Value: {2}, Type: {3}'
-                                    .format(setup_bn, name, connections, type(connections)))
+                                    .format(inputs_bn, name, connections, type(connections)))
                 for destfield, values in list(connections.items()):
                     if not isinstance(destfield, str) or \
                             not isinstance(values, (list, tuple)):
                         raise TypeError('Analysis Setup: {0}, Invalid configuration '
                                         '["method"]["{1}"]["connect"], '
                                         'Key: {2}, Value: {3}'
-                                        .format(setup_bn, name, destfield, values))
+                                        .format(inputs_bn, name, destfield, values))
                 self.input_connections[name] = connections
             else:
                 self.input_connections[name] = {}

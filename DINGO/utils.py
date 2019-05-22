@@ -272,11 +272,6 @@ def split_chpid(psid, sep):
          CHD_XXX_YYYY_ZZZZ      ->  CHD_XXX, YYYY, ZZZZ
          CHD_XXX_YYYY_ZZZZ_ZZZZ ->  CHD_XXX, YYYY, ZZZZ_ZZZZ
 """
-    if not isinstance(psid, str):
-        raise TypeError('{} is not a string'.format(psid))
-    if not isinstance(sep, str):
-        raise TypeError('{} is not a string'.format(sep))
-
     splitid = psid.split(sep)
     if splitid[0] == "CHD":
         subind = 0
@@ -328,7 +323,7 @@ def tobool(s):
 
 def byteify(data, ignore_dicts=False):
     if isinstance(data, str):
-        return data.encode('utf-8')
+        return str(data)
     if isinstance(data, list):
         return [byteify(item, ignore_dicts=True) for item in data]
     if isinstance(data, dict) and not ignore_dicts:

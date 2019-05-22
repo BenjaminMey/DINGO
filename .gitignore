@@ -111,3 +111,6 @@ crash-*
 
 #PyCharm settings
 .idea*
+
+#test directory
+foo/
