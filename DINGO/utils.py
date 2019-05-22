@@ -171,69 +171,6 @@ def split_filename(fname, special_extensions=None):
     return path, fname, ext
 
 
-def fileout_util(names=None, file_list=None, substitutions=None,
-                 psep='_', nsep='.', sub_id=None, scan_id=None, uid=None):
-    """Utility for sinker nodes to create container, folders, substitutions
-    
-    Parameters
-    ----------
-    names           :    list - parent folder names
-    file_list       :    list - files to sink
-    substitutions   :    list[tuple(str, str)
-        [('str2replace', 'input_id_suffix')]
-    sub_id          :    str - subject id
-    scan_id         :    str - scan id
-    uid             :    str - unique sequence id
-    psep            :    str - prefix separator for filename 
-        prefix = 'sub_id{psep}scan_id{psep}uid'
-    nsep            :    str - name separator for DataSink node
-        'name1{nsep}name2{nsep}'
-    
-    
-    Returns
-    -------
-    container       :    str - os.path.join(sub_id,scan_id)
-    out_file_list   :    list[str] prefix_suffix
-    newsubs         :    list[(str, str)] - [('str2replace', 'prefix_suffix')]
-    """
-    # import in function for nipype
-    from DINGO.utils import list_to_str, split_filename
-    import os
-
-    container = os.path.join(sub_id, scan_id)
-    
-    # out_file_list
-    if names is not None and isinstance(names, (list, tuple, str)):
-        folder = list_to_str(sep=nsep, args=(names, ''))  # extra empty=add nsep
-    else:
-        folder = ''
-    sinkfile = ''.join((folder, '@sinkfile'))
-    
-    setfl = []
-    if file_list is not None:
-        if not isinstance(file_list, (tuple, list)):
-            file_list = (file_list,)
-            setfl = set().union(file_list)
-            if len(setfl) != len(file_list):
-                raise IndexError('file_list does not have all unique elements')
-        else:
-            raise TypeError('file_list is not a tuple or list')
-
-    out_file_list = []
-    for elt in setfl:
-        _, newelt, _ = split_filename(elt)
-        out_file_list.append(sinkfile.replace('sinkfile', newelt))
-
-    # newsubs
-    prefix = list_to_str(sep=psep, args=(sub_id, scan_id, uid))
-    newsubs = []
-    if substitutions is not None and isinstance(substitutions, (list, tuple)):
-        for elt in substitutions:
-            newsubs.append((elt[0], elt[1].replace('input_id', prefix)))
-    
-    return container, out_file_list, newsubs
-
-
 def reverse_lookup(indict, value):
     for key in indict:
         if indict[key] == value:
@@ -387,28 +324,6 @@ def tobool(s):
         return False
     else:
         raise ValueError('{} cannot be converted to bool'.format(s))
-    
-    
-def add_id_subs(input_id=None, subs=None):
-    """create dataout substitutions combining subs with input_id"""
-    repl = []
-    if input_id is not None:
-        if (subs is not None) and isinstance(subs, (list, tuple)):
-            for e in subs:
-                if isinstance(e, tuple) and len(e) == 2 and e[1] == 'input_id':
-                    newe = (e[0], input_id)
-                    repl.append(newe)
-                else:
-                    repl.append(e)
-        else:
-            msg = 'create_out_subs:repl must be list or tuple of tuples'
-            raise TypeError(msg)
-                    
-    else:
-        msg = 'create_out_subs:input_id must be specified'
-        raise NameError(msg)
-        
-    return repl
     
 
 def byteify(data, ignore_dicts=False):
