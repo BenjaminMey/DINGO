@@ -14,7 +14,8 @@ from DINGO.utils import (read_setup,
 
 
 def keep_and_move_files():
-    cfg = dict(execution={'remove_unnecessary_outputs': u'false'})
+    cfg = dict(execution={'remove_unnecessary_outputs': u'false',
+                          'parameterize_dirs': u'false'})
     config.update_config(cfg)
 
 
